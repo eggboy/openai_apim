@@ -1,0 +1,29 @@
+{
+  "type": "Microsoft.ApiManagement/service/backends",
+  "apiVersion": "2023-09-01-preview",
+  "name": "aoai-backend-ptu",
+  "properties": {
+    "url": "https://ptu.eopenai.azure.com/openai",
+    "protocol": "http",
+    "circuitBreaker": {
+      "rules": [
+        {
+          "failureCondition": {
+            "count": "1",
+            "errorReasons": [ "timeout" ],
+            "interval": "PT1M",
+            "statusCodeRanges": [
+              {
+                "min": "429",
+                "max": "429"
+              }
+            ]
+          },
+          "name": "breakerRule",
+          "tripDuration": "PT1M",
+          "acceptRetryAfter": true
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "type": "Microsoft.ApiManagement/service/backends",
+  "apiVersion": "2023-09-01-preview",
+  "name": "aoai-lb-pool",
+  "properties": {
+    "description": "Load balance openai instances",
+    "type": "Pool",
+    "pool": {
+      "services": [
+        {
+          "id": "/backends/aoai-backend-ptu",
+          "priority": "1",
+          "weight": "1"
+        },
+        {
+          "id": "/backends/aoai-backend-payg",
+          "priority": "2",
+          "weight": "1"
+        }
+      ]
+    }
+  }
+}
