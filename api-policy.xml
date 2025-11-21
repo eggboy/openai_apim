@@ -1,0 +1,64 @@
+<!--
+    - Policies are applied in the order they appear.
+    - Position <base/> inside a section to inherit policies from the outer scope.
+    - Comments within policies are not preserved.
+-->
+<!-- Add policies as children to the <inbound>, <outbound>, <backend>, and <on-error> elements -->
+<policies>
+    <inbound>
+        <base />
+        <set-variable name="backend-id" value="@{
+            switch(context.Request.MatchedParameters["deployment-id"]) {
+                    case "gpt-4o":
+                        return "aoai-lb-gpt4o";
+
+                    case "gpt-41":
+                        return "aoai-lb-gpt41";
+
+                    default:
+                        return "aoai-lb-gpt4o";
+                }
+        }" />
+        <set-backend-service backend-id="@(context.Variables.GetValueOrDefault<string>("backend-id","aoai-lb-gpt4o"))" />
+        <authentication-managed-identity resource="https://cognitiveservices.azure.com/" />
+        <set-variable name="requestedModels" value="@(context.Request.MatchedParameters["deployment-id"])" />
+        <azure-openai-emit-token-metric namespace="apimjaygenai">
+            <dimension name="Subscription ID" />
+            <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("requestedModels","default"))" />
+            <dimension name="Product Name" value="@(context.Product.Name)" />
+        </azure-openai-emit-token-metric>
+        <llm-content-safety backend-id="content-safety-backend" shield-prompt="true">
+            <categories output-type="EightSeverityLevels">
+                <category name="SelfHarm" threshold="4" />
+                <category name="Hate" threshold="4" />
+                <category name="Violence" threshold="4" />
+            </categories>
+        </llm-content-safety>
+    </inbound>
+    <!-- Control if and how the requests are forwarded to services  -->
+    <backend>
+        <retry count="1" interval="0" first-fast-retry="true" condition="@(context.Response.StatusCode == 429 || (context.Response.StatusCode == 503 && !context.Response.StatusReason.Contains("Backend pool") && !context.Response.StatusReason.Contains("is temporarily unavailable")))">
+            <set-backend-service backend-id="@(context.Variables.GetValueOrDefault<string>("backend-id","aoai-lb-gpt4o"))" />
+            <forward-request buffer-request-body="true" />
+        </retry>
+    </backend>
+    <!-- Customize the responses -->
+    <outbound>
+        <base />
+        <set-header name="x-openai-backendurl" exists-action="override">
+            <value>@(context.Request.Url.ToString())</value>
+        </set-header>
+    </outbound>
+    <!-- Handle exceptions and customize error responses  -->
+    <on-error>
+        <base />
+        <choose>
+            <!--Return a generic error that does not reveal backend pool details.-->
+            <when condition="@(context.Response.StatusCode == 503)">
+                <return-response>
+                    <set-status code="503" reason="Service Unavailable" />
+                </return-response>
+            </when>
+        </choose>
+    </on-error>
+</policies>
